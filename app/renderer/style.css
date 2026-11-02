@@ -1,0 +1,314 @@
+:root {
+  --red: #c4161c;
+  --red-dark: #7d0b0f;
+  --red-light: #ff3b3b;
+  --screen: #0c0e11;
+  --text: #f1e6d0;
+  --gold: #f5b53b;
+  --dim: #8b8f98;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: transparent;
+  font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+.drag { -webkit-app-region: drag; }
+.no-drag, button, input, select, textarea { -webkit-app-region: no-drag; }
+.hidden { display: none !important; }
+
+/* ── Корпус телефона (assets/ui/phone.webp) ──
+   Отступы экрана и масштаб корпуса --k (px картинки → px окна) ставит app.js → drawFrame. */
+.phone {
+  position: absolute; inset: 0;
+  --k: .9; --sl: 15px; --st: 71px; --sr: 38px; --sb: 97px;
+}
+.frame {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: 50; pointer-events: none;
+  filter: drop-shadow(0 6px 14px #000a);
+}
+.cap-top { position: absolute; z-index: 51; left: 0; right: var(--sr); top: 0; height: var(--st); }
+.cap-bottom { position: absolute; z-index: 51; left: 0; right: var(--sr); bottom: 0; height: var(--sb); }
+.side-left { position: absolute; z-index: 51; left: 0; width: var(--sl); top: var(--st); bottom: var(--sb); }
+.side-right {
+  position: absolute; z-index: 51; width: calc(16px * var(--k));
+  right: calc(var(--sr) - 16px * var(--k)); top: var(--st); bottom: var(--sb);
+}
+.statusbar {
+  position: absolute; z-index: 10; left: 0; right: 0; top: 0;
+  height: 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 2px;
+  background: linear-gradient(180deg, #000d, #0006 70%, transparent);
+}
+.xp { font-weight: 800; font-size: 15px; color: var(--gold); letter-spacing: -1px; padding-left: 6px; }
+.xp i { color: #fff; font-style: normal; font-size: 12px; }
+.status { font-size: 11px; color: var(--dim); flex: 1; padding-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-right { display: flex; align-items: center; gap: 2px; }
+.icon-btn {
+  background: none; border: 0; padding: 2px 5px; font-size: 13px; color: #aab; border-radius: 4px;
+}
+.icon-btn:hover { background: #ffffff1a; color: #fff; }
+.signal { display: inline-flex; align-items: flex-end; gap: 1px; height: 12px; margin: 0 4px 0 6px; }
+.signal i { width: 3px; background: #4da3ff; }
+.signal i:nth-child(1) { height: 4px; } .signal i:nth-child(2) { height: 6px; }
+.signal i:nth-child(3) { height: 9px; } .signal i:nth-child(4) { height: 12px; }
+.battery { width: 20px; height: 10px; border: 1px solid #4da3ff; border-radius: 2px; padding: 1px; margin-right: 4px; }
+.battery i { display: block; height: 100%; width: 80%; background: #4da3ff; }
+
+/* ── Полный экран и «без рамки» ─────────────────────── */
+/* body.fullscreen и body.no-frame: корпус телефона скрывается, экран занимает окно целиком. */
+body.no-frame .screen,
+body.fullscreen .screen {
+  left: 0 !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+}
+body.no-frame .frame,
+body.fullscreen .frame,
+body.no-frame .cap-top,
+body.fullscreen .cap-top,
+body.no-frame .cap-bottom,
+body.fullscreen .cap-bottom,
+body.no-frame .side-left,
+body.fullscreen .side-left,
+body.no-frame .side-right,
+body.fullscreen .side-right,
+body.no-frame .home,
+body.fullscreen .home {
+  display: none !important;
+}
+/* В полноэкранном режиме окно не перетаскивается — иначе легко сдвинуть его с места. */
+body.fullscreen .drag { -webkit-app-region: no-drag; }
+
+/* ── Экран ───────────────────────────────────────── */
+.screen {
+  position: absolute; overflow: hidden;
+  left: var(--sl); top: var(--st); right: var(--sr); bottom: var(--sb);
+  background: #050505 url(../assets/ui/screen_bg.webp) center / cover no-repeat;
+}
+.grid {
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, #ffffff08 0 1px, transparent 1px 22px);
+}
+.binary {
+  position: absolute; inset: 0; padding: 16px 0 0 18px;
+  font: 12px/22px Consolas, monospace; color: #6c7a8a; opacity: .22;
+  white-space: pre; overflow: hidden;
+}
+.stage { position: absolute; inset: 0; z-index: 0; container-type: size; }
+/* Высота спрайта — доля высоты экрана, но не больше, чем при исходных пропорциях экрана (1 : 1.75):
+   в вытянутом вверх окне Курису не раздувается и не обрезается. */
+.char {
+  --base-h: 92;
+  position: absolute; left: 50%; bottom: var(--char-y, 0%);
+  height: calc(min(var(--base-h) * 1cqh, var(--base-h) * 1.75cqw) * var(--char-scale, 1)); width: auto; max-width: none;
+  transform-origin: 50% 100%;
+  transform: translateX(-50%);
+  transition: opacity .22s ease;
+  animation: breathe 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+.char.hidden { display: block !important; opacity: 0; }
+body.framing-bust .char { --base-h: 92; }
+body.framing-waist .char { --base-h: 94; }
+body.framing-full .char { --base-h: 95; }
+body.outfit-amadeus .char { --base-h: 93; }
+@keyframes breathe {
+  0%, 100% { transform: translateX(-50%) scale(1, 1); }
+  50% { transform: translateX(-50%) scale(1.004, 1.008); }
+}
+.logo {
+  position: absolute; right: 6px; bottom: 58px; width: 74px;
+  opacity: .9; pointer-events: none;
+}
+.glare {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(118deg, #ffffff14 0 30%, transparent 30.2%);
+}
+
+/* ── Субтитры ────────────────────────────────────── */
+.subtitle {
+  position: absolute; left: 8px; right: 8px; bottom: 54px;
+  padding: 8px 12px 10px;
+  background: linear-gradient(180deg, #0b0d12e6, #050608f0);
+  border: 1px solid #f5b53b55; border-radius: 6px;
+  box-shadow: 0 0 14px #000a;
+  max-height: 45%; overflow-y: auto;
+}
+.subtitle .name { font-size: 11px; color: var(--gold); letter-spacing: 1px; margin-bottom: 3px; }
+.subtitle .text { font-size: 14px; line-height: 1.45; white-space: pre-wrap; }
+.subtitle.user .name { color: #7fc6ff; }
+
+/* ── Ввод ────────────────────────────────────────── */
+.input-row {
+  position: absolute; left: 8px; right: 8px; bottom: 10px;
+  display: flex; gap: 6px;
+}
+.input-row input {
+  flex: 1; min-width: 0;
+  background: #000c; color: var(--text);
+  border: 1px solid #f5b53b66; border-radius: 4px;
+  padding: 8px 10px; font-size: 13px; outline: none;
+}
+.input-row input:focus { border-color: var(--gold); box-shadow: 0 0 8px #f5b53b44; }
+.attach {
+  width: 32px; flex: none; border: 1px solid #f5b53b44; border-radius: 4px;
+  background: #000c; font-size: 15px; filter: grayscale(.3);
+}
+.attach:hover { border-color: var(--gold); filter: none; }
+.send {
+  width: 36px; flex: none; border: 1px solid #f5b53b66; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffb35a, #c0561b); color: #2a0e00; font-size: 14px;
+}
+
+/* ── Вложения: файлы и фото перед отправкой ─────── */
+.attachments {
+  position: absolute; left: 8px; right: 8px; bottom: 50px; z-index: 5;
+  display: flex; gap: 6px; flex-wrap: wrap; max-height: 40%; overflow-y: auto;
+}
+.attachments .att {
+  position: relative; display: flex; align-items: center; gap: 6px;
+  max-width: 100%; height: 46px; padding: 3px 22px 3px 3px;
+  background: #000d; border: 1px solid #f5b53b66; border-radius: 4px; font-size: 11px;
+}
+.attachments .att img { height: 38px; max-width: 70px; object-fit: cover; border-radius: 2px; }
+.attachments .att .ico { width: 30px; text-align: center; font-size: 20px; }
+.attachments .att .meta { min-width: 0; line-height: 1.25; }
+.attachments .att .meta b { display: block; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.attachments .att .meta span { color: var(--dim); font-size: 10px; }
+.attachments .att button {
+  position: absolute; top: 1px; right: 1px; border: 0; background: none; color: #aab; font-size: 11px; padding: 1px 4px;
+}
+.attachments .att button:hover { color: #fff; }
+.screen.has-att .subtitle { bottom: 104px; }
+.drop-hint {
+  position: absolute; inset: 6px; z-index: 45; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--gold); border-radius: 6px; background: #000a;
+  color: var(--gold); font-size: 14px; letter-spacing: 1px;
+}
+
+/* ── Кнопка «домой» на корпусе = микрофон ────────── */
+.home {
+  position: absolute; z-index: 52;
+  left: var(--home-x, 47%); top: var(--home-y, 88.9%); width: calc(38px * var(--k)); aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 0; border-radius: 50%; background: transparent;
+  transition: box-shadow .2s, background .2s;
+}
+.home:hover { box-shadow: 0 0 10px 2px #ff8a5a88; }
+.home.recording { background: #ff303066; animation: rec 1s ease-in-out infinite; }
+.home.busy { animation: busy 1.4s ease-in-out infinite; }
+@keyframes rec { 50% { box-shadow: 0 0 18px 6px #ff2a2aaa; } }
+@keyframes busy { 50% { box-shadow: 0 0 12px 3px #f5b53b88; } }
+
+/* ── Оверлеи: история и настройки ────────────────── */
+.overlay {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column;
+  background: #07080bf2; user-select: text;
+}
+.overlay > header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; border-bottom: 1px solid #f5b53b44; color: var(--gold);
+}
+.log-list { flex: 1; overflow-y: auto; padding: 8px 10px; font-size: 13px; }
+.log-list .msg { margin: 0 0 8px; line-height: 1.4; }
+.log-list .msg b { display: block; font-size: 10px; letter-spacing: 1px; color: var(--gold); }
+.log-list .msg.user b { color: #7fc6ff; }
+.log-list .msg time { color: var(--dim); font-size: 10px; margin-left: 6px; font-weight: normal; }
+
+.settings-form { flex: 1; overflow-y: auto; padding: 6px 10px 0; font-size: 12px; }
+.settings-form details {
+  margin: 0 0 8px; border: 1px solid #f5b53b33; border-radius: 6px;
+  background: #0d0f14; padding: 0 10px;
+}
+.settings-form details[open] { padding-bottom: 8px; }
+.settings-form summary {
+  cursor: pointer; list-style: none; padding: 9px 0;
+  color: var(--gold); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+.settings-form summary::-webkit-details-marker { display: none; }
+.settings-form summary::before { content: '▸'; display: inline-block; width: 14px; transition: transform .15s; }
+.settings-form details[open] > summary::before { transform: rotate(90deg); }
+.settings-form label { display: block; margin: 0 0 9px; color: #c9ccd3; }
+.settings-form label.check { display: flex; gap: 6px; align-items: center; }
+.settings-form input:not([type=checkbox]), .settings-form select, .settings-form textarea {
+  display: block; width: 100%; margin-top: 3px;
+  background: #000; color: var(--text); border: 1px solid #444; border-radius: 3px;
+  padding: 5px 6px; font: 12px "Segoe UI", sans-serif;
+}
+.settings-form textarea { resize: vertical; line-height: 1.4; user-select: text; }
+.settings-form input:focus, .settings-form select:focus, .settings-form textarea:focus { border-color: var(--gold); outline: none; }
+.settings-form [data-only] { border-left: 2px solid #f5b53b55; padding-left: 8px; }
+.settings-form .web-box { margin: 0 0 10px; }
+.settings-form .web-box .row { margin-top: 6px; }
+.settings-form .status-line { color: #ff8a7a; font-size: 11.5px; }
+.settings-form .status-line.ok { color: #7fd68a; }
+.settings-form .row.footer {
+  position: sticky; bottom: 0; margin: 4px -10px 0; padding: 8px 10px;
+  background: #07080bf5; border-top: 1px solid #f5b53b33;
+}
+.settings-form .range-value { color: var(--gold); }
+.settings-form input[type=range] { padding: 0; accent-color: var(--gold); }
+.settings-form .hint { color: var(--dim); font-size: 10.5px; margin-top: 2px; }
+.settings-form .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.settings-form .row button {
+  flex: 1; padding: 7px; border-radius: 4px; border: 1px solid #f5b53b77; background: #1a1308; color: var(--gold);
+}
+.settings-form .row button.primary { background: var(--gold); color: #1a1000; font-weight: 700; }
+
+/* ── Загрузка ────────────────────────────────────── */
+.boot {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: radial-gradient(ellipse at 50% 40%, #1b1f26, #050608);
+  transition: opacity .6s ease;
+}
+.boot img { width: 80%; }
+.boot-line { font-family: "Times New Roman", serif; color: #9aa0aa; letter-spacing: 1px; }
+.boot-bar { width: 60%; height: 3px; background: #222; }
+.boot-bar i { display: block; height: 100%; width: 0; background: var(--gold); transition: width 1.4s ease; }
+.boot-log { font: 10px/1.5 Consolas, monospace; color: #6c7a8a; height: 60px; width: 70%; overflow: hidden; }
+.boot.done { opacity: 0; pointer-events: none; }
+@keyframes flicker { 0%, 8%, 12%, 30% { opacity: .2; } 10%, 14%, 100% { opacity: 1; } }
+
+/* ── Карточка разрешения действия ────────────────── */
+.action-card {
+  position: absolute; left: 8px; right: 8px; bottom: 54px; z-index: 15;
+  padding: 10px 12px; border-radius: 6px;
+  background: linear-gradient(180deg, #10141bf5, #07090cf8);
+  border: 1px solid #f5b53b99; box-shadow: 0 0 18px #000c, 0 0 10px #f5b53b33;
+  user-select: text;
+}
+.action-card.danger { border-color: #ff6a4a; box-shadow: 0 0 18px #000c, 0 0 12px #ff5a3a55; }
+.action-title { font-size: 11px; letter-spacing: 1px; color: var(--gold); text-transform: uppercase; margin-bottom: 4px; }
+.action-card.danger .action-title { color: #ff9a7a; }
+.action-target { font: 12px/1.4 Consolas, monospace; color: var(--text); word-break: break-all; }
+.action-content {
+  margin: 6px 0 0; max-height: 130px; overflow: auto;
+  font: 11px/1.35 Consolas, monospace; color: #cfd6e0;
+  background: #000; border: 1px solid #333; border-radius: 3px; padding: 6px; white-space: pre-wrap;
+}
+.action-buttons { display: flex; gap: 6px; margin-top: 8px; }
+.action-buttons button {
+  flex: 1; padding: 7px; border-radius: 4px; border: 1px solid #f5b53b77; background: #1a1308; color: var(--gold);
+}
+.action-buttons button.allow { background: var(--gold); color: #1a1000; font-weight: 700; }
+.action-card.danger .action-buttons button.allow { background: #ff7a4a; border-color: #ff7a4a; }
+.action-hint { margin-top: 5px; font-size: 10px; color: var(--dim); text-align: center; }
+
+.toast {
+  position: absolute; left: 10px; right: 10px; top: 32px; z-index: 40;
+  padding: 7px 10px; border-radius: 4px; font-size: 11.5px;
+  background: #3a0b0bee; border: 1px solid #ff5a5a88; color: #ffd9d9;
+}

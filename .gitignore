@@ -1,0 +1,44 @@
+# Зависимости
+node_modules/
+app/node_modules/
+
+# Локальные голосовые данные: модели, датасеты, записи, окружения Python.
+# Они не входят в репозиторий — каждый подключает свои пути в настройках.
+/voice/
+
+# Сборки и артефакты
+dist/
+out/
+build/
+release/
+*.asar
+
+# Логи и временные файлы
+*.log
+npm-debug.log*
+yarn-error.log*
+*.tmp
+*.temp
+
+# Секреты и локальные настройки
+.env
+.env.*
+*.pem
+*.key
+settings.json
+history.json
+memory.json
+window.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Редакторы и ОС
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

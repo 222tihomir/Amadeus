@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'">
+  <title>Amadeus</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="phone">
+    <main class="screen">
+      <div class="grid"></div>
+      <div class="binary" id="binary"></div>
+      <div class="stage drag" id="stage">
+        <img class="char" id="charA" alt="">
+        <img class="char hidden" id="charB" alt="">
+      </div>
+      <img class="logo" src="../assets/ui/logo.webp" alt="">
+      <div class="glare"></div>
+
+      <header class="statusbar drag">
+        <span class="xp">X<i>p</i></span>
+        <span id="status" class="status"></span>
+        <div class="top-right">
+          <button class="icon-btn no-drag" id="btn-log" title="История">☰</button>
+          <button class="icon-btn no-drag" id="btn-settings" title="Настройки">⚙</button>
+          <button class="icon-btn no-drag" id="btn-max" title="Во весь экран">▢</button>
+          <button class="icon-btn no-drag" id="btn-min" title="Свернуть">–</button>
+          <button class="icon-btn no-drag" id="btn-close" title="Закрыть">✕</button>
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <span class="battery"><i></i></span>
+        </div>
+      </header>
+
+      <div class="subtitle hidden" id="subtitle">
+        <div class="name">Amadeus</div>
+        <div class="text" id="subtitle-text"></div>
+      </div>
+
+      <div class="action-card hidden no-drag" id="action-card"></div>
+      <div class="attachments hidden no-drag" id="attachments"></div>
+      <form class="input-row no-drag" id="input-form">
+        <button type="button" class="attach" id="btn-attach" title="Прикрепить файл или фото (можно перетащить или вставить Ctrl+V)">📎</button>
+        <input id="input" type="text" placeholder="Напиши Курису..." autocomplete="off">
+        <button type="submit" class="send" title="Отправить">➤</button>
+        <input type="file" id="file-input" multiple hidden>
+      </form>
+      <div class="drop-hint hidden" id="drop-hint">Отпусти, чтобы прикрепить</div>
+
+      <section class="overlay hidden no-drag" id="log">
+        <header><b>История</b><button class="icon-btn" data-close>✕</button></header>
+        <div class="log-list" id="log-list"></div>
+      </section>
+
+      <section class="overlay hidden no-drag" id="settings">
+        <header><b>Настройки</b><button class="icon-btn" data-close>✕</button></header>
+        <form class="settings-form" id="settings-form"></form>
+      </section>
+
+      <div class="boot" id="boot">
+        <img id="boot-logo" src="../assets/ui/logo_anim/00.webp" alt="">
+        <div class="boot-line">Amadeus.system</div>
+        <div class="boot-bar"><i></i></div>
+        <div class="boot-log" id="boot-log"></div>
+      </div>
+      <div class="toast hidden" id="toast"></div>
+    </main>
+
+    <!-- Корпус телефона из игры поверх экрана, нарезан на куски (app.js → drawFrame);
+         полосы корпуса — области перетаскивания окна -->
+    <canvas class="frame" id="frame"></canvas>
+    <div class="drag cap-top"></div>
+    <div class="drag cap-bottom"></div>
+    <div class="drag side-left"></div>
+    <div class="drag side-right"></div>
+    <button class="home no-drag" id="btn-mic" title="Голосовой ввод (клик — говорить)"></button>
+  </div>
+
+  <script src="../shared/emotions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

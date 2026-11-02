@@ -1,0 +1,28 @@
+{
+  "name": "amadeus",
+  "productName": "Amadeus",
+  "version": "0.1.0",
+  "description": "Amadeus — Курису Макисе на рабочем столе",
+  "main": "main/main.js",
+  "private": true,
+  "license": "MIT",
+  "keywords": [
+    "electron",
+    "desktop-pet",
+    "ai-companion",
+    "tts",
+    "voice-cloning"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "sprites": "python tools/prepare_sprites.py",
+    "phone": "python tools/make_phone.py",
+    "ui": "python tools/make_ui.py"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0"
+  }
+}
