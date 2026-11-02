@@ -389,7 +389,7 @@ app.whenReady().then(() => {
   setupIpc();
   createWindow();
   registerHotkey();
-  // Голос Курису (RVC) грузим заранее — иначе первый ответ ждёт модель ~15 секунд.
+  // Голосовые модели грузим заранее — иначе первый ответ ждёт загрузку ~15 секунд.
   voice.warmup(store.getSettings()).catch(() => {});
 });
 

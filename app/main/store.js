@@ -38,9 +38,9 @@ const DEFAULT_SETTINGS = {
   visionProvider: 'auto', // auto | web | anthropic | openai (DeepSeek API картинки не видит)
 
   // Озвучка: локально через OmniVoice (по умолчанию) или через VoiceStudio.
-  // silero — «лёгкий» backend: Silero (русский TTS) → RVC (Курису), если RVC настроен.
+  // silero — «лёгкий» backend: русский TTS Silero на CPU.
   ttsEnabled: true,
-  ttsBackend: 'local', // local (OmniVoice напрямую) | voicestudio (HTTP-API приложения) | silero (Silero → RVC)
+  ttsBackend: 'local', // local (OmniVoice напрямую) | voicestudio (HTTP-API приложения) | silero (Silero)
   // Пути к моделям и окружению задаются в настройках: в репозитории их нет.
   ttsPython: '', // python.exe из venv, где установлен OmniVoice
   ttsModelDir: '', // папка с моделью OmniVoice
@@ -53,22 +53,11 @@ const DEFAULT_SETTINGS = {
   ttsEmotion: true, // передавать эмоцию в TTS (instruct + скорость)
   volume: 0.9,
 
-  // Silero v5 (русский TTS): базовый синтез, дальше RVC (см. блок «Голос Курису»).
+  // Silero v5 (русский TTS) — лёгкий локальный синтез.
   sileroPython: '', // python.exe из venv с Silero
   sileroModel: '', // файл silero_tts_ru_v5.pt
   sileroSpeaker: 'baya',
   sileroLanguage: 'ru',
-
-  // Обученная модель голоса (RVC из Applio): звук VoiceStudio прогоняется через неё.
-  // По умолчанию выключено; требует отдельного окружения Applio (в репозиторий не входит).
-  rvcEnabled: false,
-  rvcPython: '',
-  rvcRoot: '',
-  rvcPth: '',
-  rvcIndex: '',
-  rvcPitch: 0, // полутона: 0 — как есть, +12 — на октаву выше
-  rvcIndexRate: 0.75, // насколько сильно подмешивать тембр из индекса
-  rvcProtect: 0.33, // защита согласных от искажений
 
   // Распознавание речи
   sttProvider: 'voicestudio', // voicestudio | openai

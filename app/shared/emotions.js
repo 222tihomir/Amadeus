@@ -3,6 +3,7 @@
 //   наряд: A — бежевый жакет (без халата), B — белый халат, J — Amadeus
 //   кадр:  L — бюст, M — по пояс, S — в полный рост
 //   поза:  A — руки опущены (d1–d9), B — руки скрещены (d1–d9), C — рука у галстука (d1–d6)
+//          F — спиной, обиделась (одиночный кадр _b1, есть только для нарядов A и J)
 //   рот:   0 — закрыт, 1 — приоткрыт, 2 — открыт
 // pose/d — для нарядов A и B; j — номер лица для версии Amadeus (JLD, d1–d6).
 // voice — подсказка для движков с поддержкой instruct, speed — множитель скорости речи.
@@ -27,6 +28,7 @@
     { id: 'worried', hint: 'волнуется за пользователя', pose: 'C', d: 4, j: 5, voice: 'worried, concerned, gentle', speed: 0.95 },
     { id: 'troubled', hint: 'тяжело вздыхает, закрыв глаза', pose: 'C', d: 3, j: 6, voice: 'troubled, sighing, tired', speed: 0.92 },
     { id: 'melancholy', hint: 'задумчиво-печально', pose: 'C', d: 5, j: 5, voice: 'melancholic, wistful, quiet', speed: 0.9 },
+    { id: 'offended', hint: 'обиделась, отвернулась спиной', pose: 'F', voice: 'offended, hurt, cold and pouting', speed: 0.95 },
   ];
 
   const BY_ID = Object.fromEntries(EMOTIONS.map((e) => [e.id, e]));
@@ -38,6 +40,14 @@
   function spriteFrames(emotionId, outfit, framing) {
     const e = BY_ID[emotionId] || BY_ID.neutral;
     const o = OUTFITS[outfit] || 'B';
+    // Поза F (спиной) — одиночный кадр без вариантов рта: отдаём его трижды,
+    // анимация рта просто ничего не меняет. Для халата (B) спрайта нет — берём жакет;
+    // у Amadeus (J) есть только полный рост.
+    if (e.pose === 'F') {
+      const f = FRAMINGS[framing] || 'L';
+      const file = o === 'J' ? 'CRS_JSF_b1.webp' : `CRS_${o === 'B' ? 'A' : o}${f}F_b1.webp`;
+      return [file, file, file];
+    }
     let base;
     if (o === 'J') base = `CRS_JLD_d${e.j}`;
     else base = `CRS_${o}${FRAMINGS[framing] || 'L'}${e.pose}_d${e.d}`;

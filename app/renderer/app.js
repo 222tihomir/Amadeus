@@ -798,14 +798,14 @@ const SCHEMA = [
 
   { h: 'Озвучка (ответы Курису)' },
   { k: 'ttsEnabled', l: 'Озвучивать ответы', type: 'checkbox' },
-  { k: 'ttsBackend', l: 'Движок озвучки', opts: [['local', 'Локальный (OmniVoice, без VoiceStudio)'], ['voicestudio', 'VoiceStudio (HTTP-сервер)'], ['silero', 'Silero → RVC (лёгкий: Silero + обученный RVC)']] },
+  { k: 'ttsBackend', l: 'Движок озвучки', opts: [['local', 'Локальный (OmniVoice, без VoiceStudio)'], ['voicestudio', 'VoiceStudio (HTTP-сервер)'], ['silero', 'Silero (лёгкий синтез)']] },
   { h: 'Локальный движок (OmniVoice)' },
   { k: 'ttsPython', l: 'Python (env с OmniVoice)', only: 'local', hint: 'python.exe из venv, где установлен OmniVoice: …\\venv\\Scripts\\python.exe' },
   { k: 'ttsModelDir', l: 'Папка модели OmniVoice', only: 'local', hint: 'Папка с model.safetensors и tokenizer.json' },
   { k: 'ttsRefAudio', l: 'Референс Курису (файл)', only: 'local', hint: 'Аудио с голосом для клонирования (wav/ogg/mp3)' },
   { k: 'ttsRefTextFile', l: 'Референс: текст оригинала (файл)', only: 'local', hint: 'Текст, который произнесён в референсной записи' },
   { k: 'ttsSteps', l: 'Шагов генерации', type: 'number', min: 4, max: 64, step: 1, unit: '', only: 'local', hint: 'Меньше — быстрее и чуть «проще», до 16 уже хорошо. 32 — чуть длиннее тихий этап' },
-  { h: 'Silero → RVC (лёгкий базовый синтез)' },
+  { h: 'Silero (лёгкий базовый синтез)' },
   { k: 'sileroPython', l: 'Python (env с Silero)', only: 'silero', hint: 'python.exe из venv с Silero: …\\venv\\Scripts\\python.exe' },
   { k: 'sileroModel', l: 'Модель Silero (файл)', only: 'silero', hint: 'Файл модели v5 ru: silero_tts_ru_v5.pt' },
   { k: 'sileroSpeaker', l: 'Голос Silero (v5_…_ru)', only: 'silero', hint: 'aidar, baya, kseniya, xenia, eugene — голос Silero, который будет базовым' },
@@ -817,19 +817,9 @@ const SCHEMA = [
   { k: 'ttsEngine', l: 'Движок TTS', only: 'voicestudio', hint: 'Пусто — как выбрано в VoiceStudio. Эмоции в голосе лучше всего у cosyvoice, voxcpm2, indextts2' },
   { k: 'ttsEmotion', l: 'Передавать эмоции в голос (тон и темп)', type: 'checkbox', only: 'voicestudio' },
   { k: 'volume', l: 'Громкость', type: 'range', step: 0.05, min: 0, max: 1, unit: '×' },
+  { voiceTest: true },
   { k: 'sttProvider', l: 'Распознавание речи', opts: [['voicestudio', 'VoiceStudio (локально)'], ['openai', 'OpenAI Whisper (нужен ключ OpenAI)']] },
   { k: 'micHotkey', l: 'Горячая клавиша микрофона', hint: 'Например Control+Alt+A. Пусто — выключено' },
-
-  { h: 'Голос Курису (обученная модель)', open: false },
-  { k: 'rvcEnabled', l: 'Пропускать озвучку через обученную модель Курису (RVC)', type: 'checkbox', hint: 'VoiceStudio синтезирует базовый голос, затем RVC-модель Applio меняет тембр на обученный. Первая фраза после запуска (~15 с) загружает модель, дальше — доли секунды' },
-  { k: 'rvcPth', l: 'Модель (.pth)' },
-  { k: 'rvcIndex', l: 'Индекс (.index)', hint: 'Чем больше «Сила индекса», тем ближе тембр к обучающим записям' },
-  { k: 'rvcPython', l: 'Python из папки Applio\\env' },
-  { k: 'rvcRoot', l: 'Папка Applio', hint: 'В ней лежат core.py, rvc\\ и env\\. Воркеру она нужна, чтобы найти код RVC' },
-  { k: 'rvcPitch', l: 'Тон (полутона)', type: 'number', min: -12, max: 12, step: 1, hint: '0 — как есть. +12 — на октаву выше (если голос кажется низким), −12 — ниже' },
-  { k: 'rvcIndexRate', l: 'Сила индекса', type: 'range', min: 0, max: 1, step: 0.05, unit: '×', hint: '0.75 — баланс тембра и естественности' },
-  { k: 'rvcProtect', l: 'Защита согласных', type: 'range', min: 0, max: 0.5, step: 0.01, unit: '×', hint: '0.33 — меньше свистящих и «металла» в звуке' },
-  { rvcButtons: true },
 
   { h: 'Внешний вид' },
   { k: 'outfit', l: 'Наряд', opts: [['coat', 'В халате'], ['jacket', 'Без халата'], ['amadeus', 'Amadeus (как в приложении)']] },
@@ -1038,8 +1028,8 @@ async function buildSettingsForm() {
       const row = buttonRow([['Модели из OpenCode', () => loadOpencodeModels()]]);
       if (f.only) row.dataset.only = f.only;
       section.appendChild(row);
-    } else if (f.rvcButtons) {
-      section.appendChild(buttonRow([['Проверить голос Курису', testVoice]]));
+    } else if (f.voiceTest) {
+      section.appendChild(buttonRow([['Проверить голос', testVoice]]));
     } else {
       section.appendChild(buildField(f));
     }
@@ -1117,7 +1107,7 @@ async function saveSettings(close = true) {
   toast(switched ? 'Сохранено. Отвечать будет OpenCode' : 'Сохранено', switched ? 3000 : 1500);
 }
 
-// Проба голоса прямо из настроек: синтез + RVC + воспроизведение.
+// Проба голоса прямо из настроек: синтез + воспроизведение.
 async function testVoice() {
   try {
     await saveSettings(false); // берём то, что сейчас в форме

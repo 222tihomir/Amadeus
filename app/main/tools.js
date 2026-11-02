@@ -43,6 +43,13 @@ function cleanContent(text) {
   return lines.join('\n');
 }
 
+// Команда приходит одной строкой в powershell -Command, поэтому переносы строк между
+// операторами склеиваются и ломают парсер. Собираем операторы через ';'.
+function joinPsLines(t) {
+  return String(t).split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+    .reduce((acc, s) => (!acc ? s : /[|`{(/]$/.test(acc) ? `${acc} ${s}` : `${acc}; ${s}`), '');
+}
+
 // Вынимает действия из ответа нейросети. Возвращает текст без них и список действий.
 function extract(raw) {
   const actions = [];
@@ -53,7 +60,9 @@ function extract(raw) {
       const target = arg.trim().replace(/^["']|["']$/g, '');
       if (target) actions.push({ type, target, content: cleanContent(unfence(body)) });
     } else {
-      const target = unfence(body).trim();
+      // модель иногда пишет путь в заголовке, как у write ([action:list путь]) — принимаем обе формы
+      let target = unfence(body).trim() || arg.trim().replace(/^["']|["']$/g, '');
+      if (type === 'run') target = joinPsLines(target);
       if (target) actions.push({ type, target });
     }
     return '';

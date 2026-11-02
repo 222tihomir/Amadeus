@@ -288,10 +288,10 @@ async function opencodeModels(s) {
 // ── Встроенный браузер (main/webchat.js): пишет на сайт нейросети от твоего аккаунта ──
 // Чат на сайте сам хранит контекст, поэтому характер, пересказ прошлого и недавний диалог
 // отправляются только в первом сообщении нового чата, дальше — только реплики.
+// Открытый чат сайта сохраняется в webchat.js: после перезапуска приложения он продолжается.
 const REMINDER = '(Ты — Курису/Amadeus. Ответь коротко, вслух, по-русски, с тегами эмоций перед фразами, без markdown. '
   + 'Веди себя по ситуации: цундэрэ — только если есть повод, без повторов своих прошлых фраз и без Dr Pepper не к месту.)';
 
-const webChats = new Set(); // сайты, где открыт чат, уже получивший характер
 const webQueues = new Map(); // сайт → очередь запросов (решение «новый чат или нет» — строго по порядку)
 
 function queued(site, fn) {
@@ -322,14 +322,21 @@ function web(s, system, messages, site) {
   return queued(site, async () => {
     const webchat = require('./webchat');
     const current = messages[messages.length - 1];
-    if (webchat.isFresh(site)) webChats.delete(site);
-    const fresh = !webChats.has(site);
+    const fresh = !webchat.hasChat(site);
     const message = fresh
       ? intro(system, messages.slice(0, -1).slice(-16)) + current.content
       : `${current.content}\n\n${REMINDER}`;
-    const reply = await webchat.ask(site, message, { newChat: fresh, files: attachmentsOf(current) });
-    webChats.add(site);
-    return stripPreamble(reply);
+    try {
+      const reply = await webchat.ask(site, message, { newChat: fresh, files: attachmentsOf(current) });
+      return stripPreamble(reply);
+    } catch (err) {
+      if (fresh) throw err;
+      // Сохранённый чат мог исчезнуть (удалён на сайте, разлогин) — повторяем уже новым чатом.
+      webchat.clearChat(site);
+      const retry = intro(system, messages.slice(0, -1).slice(-16)) + current.content;
+      const reply = await webchat.ask(site, retry, { newChat: true, files: attachmentsOf(current) });
+      return stripPreamble(reply);
+    }
   });
 }
 
@@ -374,12 +381,12 @@ function summarize(s, prevSummary, messages) {
     const site = s.webSite;
     return queued(site, async () => {
       const webchat = require('./webchat');
-      const inChat = webChats.has(site) && !webchat.isFresh(site);
+      const inChat = webchat.hasChat(site);
       const text = inChat
         ? await webchat.ask(site, `[СИСТЕМА] Выйди из роли на одно сообщение и перескажи весь наш разговор с самого начала `
           + `(включая пересказ из первого сообщения, если он был). ${SUMMARY_RULES}`)
         : await webchat.ask(site, summaryRequest(prevSummary, messages), { newChat: true });
-      webChats.delete(site);
+      webchat.clearChat(site);
       return cleanSummary(text);
     });
   }

@@ -21,6 +21,38 @@ function site(name) {
   return cfg;
 }
 
+// Открытый чат каждого сайта сохраняется (адрес чата на сайте), чтобы после перезапуска
+// продолжить его, а не начинать новый. Домашняя страница сайта чатом не считается.
+const chatStateFile = () => path.join(app.getPath('userData'), 'webchats.json');
+let chatState = (() => {
+  try { return JSON.parse(fs.readFileSync(chatStateFile(), 'utf8')); } catch { return {}; }
+})();
+function persistChatState() {
+  try {
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    fs.writeFileSync(chatStateFile(), JSON.stringify(chatState, null, 1), 'utf8');
+  } catch { /* не сохранилось — после перезапуска начнётся новый чат */ }
+}
+function savedChatUrl(name) {
+  return chatState[name] && chatState[name].url ? chatState[name].url : null;
+}
+function hasChat(name) {
+  return !!(savedChatUrl(name) && chatState[name].persona);
+}
+function clearChat(name) {
+  if (chatState[name]) {
+    delete chatState[name];
+    persistChatState();
+  }
+}
+function saveChat(name, url) {
+  if (!url || url === site(name).url) clearChat(name);
+  else {
+    chatState[name] = { url, persona: true };
+    persistChatState();
+  }
+}
+
 // User-Agent браузера, в котором был вход (Chrome) — чтобы сайт не видел смены браузера.
 const uaFile = () => path.join(app.getPath('userData'), 'web-ua.json');
 function readUas() {
@@ -88,6 +120,28 @@ function pageFind(sels) {
 
 function pageSnapshot(cfg) {
   const vis = (e) => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
+  const BLOCK = new Set(['DIV','P','UL','OL','LI','TABLE','TR','THEAD','TBODY','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','PRE','SECTION','ARTICLE','FIGURE','DL','DD','HR']);
+  // Похож на innerText, но <pre>/<code> читает через textContent (с пробелами, как в DOM).
+  function walkText(root) {
+    const out = [];
+    const walk = (node) => {
+      for (const ch of node.childNodes) {
+        if (ch.nodeType === 3) { out.push(ch.nodeValue); continue; }
+        if (ch.nodeType !== 1) continue;
+        const tag = ch.tagName;
+        if (tag === 'PRE' || (tag === 'CODE' && !ch.querySelector('pre'))) {
+          out.push('\n', ch.textContent || '', '\n');
+          continue;
+        }
+        if (tag === 'BR') { out.push('\n'); continue; }
+        walk(ch);
+        if (BLOCK.has(tag)) out.push('\n');
+        else if (tag === 'TD' || tag === 'TH') out.push(' ');
+      }
+    };
+    walk(root);
+    return out.join('').replace(/\n{3,}/g, '\n\n');
+  }
   // Сайты рисуют вокруг кода служебные элементы (заголовок «Python», кнопки Copy/Download).
   // Прячем их на время чтения и сразу возвращаем: innerText тогда сохраняет абзацы и код,
   // а мусор не попадает в текст ответа и в файлы. Клонировать нельзя — у отвязанного узла
@@ -107,7 +161,10 @@ function pageSnapshot(cfg) {
         hidden.push([n, n.style.display]);
         n.style.display = 'none';
       });
-      return el.innerText || el.textContent || '';
+      // innerText у части сайтов (DeepSeek) теряет ведущие пробелы в блоках кода —
+      // из-за этого в записанных файлах съезжают отступы. Код читаем из DOM напрямую,
+      // остальной текст — как отрисован (innerText даёт абзацы и переводы строк).
+      return walkText(el);
     } catch {
       return el.innerText || el.textContent || '';
     } finally {
@@ -342,11 +399,6 @@ async function saveCookies(name) {
   fs.writeFileSync(path.join(cookieDir(), `${name}.json`), JSON.stringify(out, null, 1), 'utf8');
 }
 
-function isFresh(name) {
-  const w = wins.get(name);
-  return !w || w.isDestroyed() || fresh.has(name);
-}
-
 // Отправляет сообщение на сайт и ждёт ответ целиком. files — вложения [{ name, mime, data: base64 }].
 function ask(name, message, { newChat = false, files = [], onProgress } = {}) {
   return withLock(name, async () => {
@@ -354,7 +406,12 @@ function ask(name, message, { newChat = false, files = [], onProgress } = {}) {
     const w = getWindow(name);
     const wasFresh = fresh.has(name);
     fresh.delete(name);
-    if (newChat && !wasFresh) w.loadURL(cfg.url);
+    if (newChat) {
+      clearChat(name);
+      if (!wasFresh) w.loadURL(cfg.url);
+    } else if (wasFresh && savedChatUrl(name)) {
+      w.loadURL(savedChatUrl(name)); // после перезапуска продолжаем вчерашний чат
+    }
     await waitLoad(w);
     debug(name, 'loaded', w.webContents.getURL());
 
@@ -430,15 +487,20 @@ function ask(name, message, { newChat = false, files = [], onProgress } = {}) {
       const text = snap.replies[chosen].last.trim();
       if (text && onProgress) onProgress(text);
       if (text && text === last && !snap.stop) {
-        if (++stable >= 3) { debug(name, 'done', ((Date.now() - start) / 1000).toFixed(1) + 's'); return text; }
+        if (++stable >= 3) {
+          debug(name, 'done', ((Date.now() - start) / 1000).toFixed(1) + 's');
+          saveChat(name, w.webContents.getURL());
+          return text;
+        }
       } else {
         stable = 0;
         last = text;
       }
     }
+    saveChat(name, w.webContents.getURL());
     if (last) return last;
     throw new Error(`${cfg.name}: сообщение отправлено, но ответ не появился. Открой ⚙ → «Показать браузер»`);
   });
 }
 
-module.exports = { SITES, ask, isFresh, isLoggedIn, show, hide, isVisible, importLogin, saveCookies };
+module.exports = { SITES, ask, hasChat, clearChat, isLoggedIn, show, hide, isVisible, importLogin, saveCookies };
