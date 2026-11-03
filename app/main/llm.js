@@ -120,25 +120,47 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { isWindows, isMac, isExecutable, findOnPath } = require('./platform');
 
-const OC_PROMPT_LIMIT = 24000; // Windows ограничивает длину аргументов — режем переписку
+const OC_PROMPT_LIMIT = 24000; // длинная переписка не влезает в аргументы команды (особенно на Windows)
 
 function opencodeCliPath(s) {
-  const exe = process.platform === 'win32' ? 'opencode-cli.exe' : 'opencode';
-  const ok = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+  const exe = isWindows ? 'opencode-cli.exe' : 'opencode';
+  const ok = isExecutable;
   if (s.opencodeCli && ok(s.opencodeCli)) return s.opencodeCli;
 
-  // Установленное приложение OpenCode хранит CLI в %APPDATA%\ai.opencode.desktop\cli\<версия>\.
-  const base = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'ai.opencode.desktop', 'cli');
-  try {
-    const found = fs.readdirSync(base)
-      .map((d) => path.join(base, d, exe))
-      .filter(ok)
-      .map((p) => ({ p, t: fs.statSync(p).mtimeMs }))
-      .sort((a, b) => b.t - a.t)[0];
-    if (found) return found.p;
-  } catch { /* нет каталога — ищем в PATH */ }
-  return exe;
+  // Где установленное приложение OpenCode хранит CLI:
+  //   Windows — %APPDATA%\ai.opencode.desktop\cli\<версия>\
+  //   Linux   — ~/.config/ai.opencode.desktop/cli, ~/.local/share/opencode/cli, ~/.opencode/bin
+  //   macOS   — ~/Library/Application Support/ai.opencode.desktop/cli
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+  const bases = isWindows
+    ? [path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'ai.opencode.desktop', 'cli')]
+    : isMac
+      ? [path.join(os.homedir(), 'Library', 'Application Support', 'ai.opencode.desktop', 'cli')]
+      : [
+        path.join(configHome, 'ai.opencode.desktop', 'cli'),
+        path.join(dataHome, 'ai.opencode.desktop', 'cli'),
+        path.join(configHome, 'opencode', 'cli'),
+        path.join(dataHome, 'opencode', 'cli'),
+        path.join(os.homedir(), '.opencode', 'bin'),
+      ];
+  for (const base of bases) {
+    // Иногда бинарь лежит прямо в каталоге, иногда — в подкаталоге с версией.
+    const direct = path.join(base, exe);
+    if (ok(direct)) return direct;
+    try {
+      const found = fs.readdirSync(base)
+        .map((d) => path.join(base, d, exe))
+        .filter(ok)
+        .map((p) => ({ p, t: fs.statSync(p).mtimeMs }))
+        .sort((a, b) => b.t - a.t)[0];
+      if (found) return found.p;
+    } catch { /* нет каталога — пробуем следующий */ }
+  }
+  // Обычная установка (npm/пакетный менеджер) — бинарь в PATH.
+  return findOnPath(exe) || exe;
 }
 
 // Каталог-песочница: там лежит opencode.json, запрещающий инструменты (файлы, команды, интернет).

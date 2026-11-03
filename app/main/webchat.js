@@ -5,8 +5,16 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, session } = require('electron');
 const SITES = require('./sites');
+const { isWindows, isMac } = require('./platform');
 
-const UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
+// User-Agent как у настоящего Chrome на этой системе: сайты чаще отдают полный интерфейс
+// и меньше подозревают автоматизацию, если строка совпадает с платформой.
+const UA_PLATFORM = isWindows
+  ? 'Windows NT 10.0; Win64; x64'
+  : isMac
+    ? 'Macintosh; Intel Mac OS X 10_15_7'
+    : 'X11; Linux x86_64';
+const UA = `Mozilla/5.0 (${UA_PLATFORM}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
 const wins = new Map(); // сайт → BrowserWindow
 const fresh = new Set(); // сайты, где страница открыта заново (на ней пустой чат)
 const locks = new Map();

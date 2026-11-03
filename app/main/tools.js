@@ -1,5 +1,6 @@
 // Доступ Курису к компьютеру: открыть сайт/файл/программу, прочитать файл или папку,
-// записать файл, выполнить команду PowerShell. Нейросеть пишет в ответе блоки
+// записать файл, выполнить команду оболочки (PowerShell на Windows, bash/sh на Linux).
+// Нейросеть пишет в ответе блоки
 //   [action:open] цель [/action]          [action:read] путь [/action]
 //   [action:list] папка [/action]         [action:run] команда [/action]
 //   [action:write путь] содержимое [/action]
@@ -9,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { app, shell } = require('electron');
+const { isWindows } = require('./platform');
 
 const TYPES = {
   open: { title: 'Открыть', safe: true },
@@ -43,11 +45,15 @@ function cleanContent(text) {
   return lines.join('\n');
 }
 
-// Команда приходит одной строкой в powershell -Command, поэтому переносы строк между
-// операторами склеиваются и ломают парсер. Собираем операторы через ';'.
-function joinPsLines(t) {
+// Команда приходит одной строкой в оболочку, поэтому переносы строк между операторами
+// склеиваются иначе. Собираем их через ';', кроме строк, которые явно продолжаются.
+function joinCommandLines(t) {
   return String(t).split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
-    .reduce((acc, s) => (!acc ? s : /[|`{(/]$/.test(acc) ? `${acc} ${s}` : `${acc}; ${s}`), '');
+    .reduce((acc, s) => {
+      if (!acc) return s;
+      if (/[|`{(/\\]$/.test(acc) || /(?:&&|\|\|)$/.test(acc)) return `${acc} ${s}`;
+      return `${acc}; ${s}`;
+    }, '');
 }
 
 // Вынимает действия из ответа нейросети. Возвращает текст без них и список действий.
@@ -62,7 +68,7 @@ function extract(raw) {
     } else {
       // модель иногда пишет путь в заголовке, как у write ([action:list путь]) — принимаем обе формы
       let target = unfence(body).trim() || arg.trim().replace(/^["']|["']$/g, '');
-      if (type === 'run') target = joinPsLines(target);
+      if (type === 'run') target = joinCommandLines(target);
       if (target) actions.push({ type, target });
     }
     return '';
@@ -72,8 +78,15 @@ function extract(raw) {
 
 function expandPath(p) {
   let out = p.trim().replace(/^["']|["']$/g, '');
+  // Windows: %USERPROFILE%; Linux/macOS: $HOME и ${HOME}.
   out = out.replace(/%([^%]+)%/g, (m, v) => process.env[v] ?? m);
-  if (out === '~' || out.startsWith('~/') || out.startsWith('~\\')) out = path.join(os.homedir(), out.slice(1));
+  if (!isWindows) {
+    out = out.replace(/\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g,
+      (m, braced, plain) => process.env[braced || plain] ?? m);
+  }
+  if (out === '~' || /^~[\\/]/.test(out)) {
+    out = path.join(os.homedir(), out.slice(1).replace(/^[\\/]/, ''));
+  }
   return path.resolve(os.homedir(), out);
 }
 
@@ -88,23 +101,55 @@ function describe(action) {
   return { title: TYPES[action.type].title, safe: TYPES[action.type].safe };
 }
 
-function runPowerShell(command) {
+// Выполняет команду в оболочке системы. На Linux/macOS это $SHELL (обычно bash/zsh),
+// процесс запускается отдельной группой, чтобы таймаут убивал и дочерние команды.
+function runShell(command) {
   return new Promise((resolve) => {
-    const ps = spawn('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
-      `[Console]::OutputEncoding=[Text.Encoding]::UTF8; ${command}`,
-    ], { cwd: os.homedir(), windowsHide: true });
+    const ps = isWindows
+      ? spawn('powershell.exe', [
+        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
+        `[Console]::OutputEncoding=[Text.Encoding]::UTF8; ${command}`,
+      ], { cwd: os.homedir(), windowsHide: true })
+      : spawn(process.env.SHELL || '/bin/sh', ['-c', command],
+        { cwd: os.homedir(), detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     const add = (d) => { if (out.length < MAX_OUTPUT * 2) out += d.toString('utf8'); };
     ps.stdout.on('data', add);
     ps.stderr.on('data', add);
-    const timer = setTimeout(() => { ps.kill(); out += '\n(остановлено: команда шла дольше 60 с)'; }, 60000);
+    const kill = () => {
+      try {
+        if (!isWindows && ps.pid) process.kill(-ps.pid, 'SIGKILL');
+        else ps.kill();
+      } catch {
+        try { ps.kill(); } catch { /* уже завершён */ }
+      }
+    };
+    const timer = setTimeout(() => { kill(); out += '\n(остановлено: команда шла дольше 60 с)'; }, 60000);
     ps.on('close', (code) => {
       clearTimeout(timer);
       const text = out.trim().slice(0, MAX_OUTPUT) || '(нет вывода)';
       resolve(`код выхода ${code}\n${text}`);
     });
     ps.on('error', (err) => { clearTimeout(timer); resolve(`ошибка запуска: ${err.message}`); });
+  });
+}
+
+// Запуск программы по имени (notepad, calc, firefox…). На Linux/macOS — напрямую из PATH,
+// без shell, чтобы имя не могло превратиться в произвольную команду.
+function launchProgram(name) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(name, [], { detached: true, stdio: 'ignore' });
+    } catch (err) {
+      resolve({ ok: false, text: `не удалось запустить ${name}: ${err.message}` });
+      return;
+    }
+    child.on('error', (err) => resolve({ ok: false, text: `не удалось запустить ${name}: ${err.message}` }));
+    child.on('spawn', () => {
+      child.unref();
+      resolve({ ok: true, text: `запущено: ${name}` });
+    });
   });
 }
 
@@ -135,13 +180,18 @@ async function execute(action) {
           const err = await shell.openPath(p);
           return err ? { ok: false, text: err } : { ok: true, text: `открыто: ${p}` };
         }
-        // Имя программы (notepad, calc, chrome, steam…) — через «start», как в окне «Выполнить».
-        // Спецсимволы cmd запрещены, иначе «открыть» превратилось бы в произвольную команду.
-        if (/[&|<>^%"\r\n]/.test(t)) return { ok: false, text: `недопустимые символы в имени программы: ${t}` };
-        spawn('cmd.exe', ['/d', '/c', `start "" "${t}"`], {
-          detached: true, windowsHide: true, stdio: 'ignore', windowsVerbatimArguments: true,
-        }).unref();
-        return { ok: true, text: `запущено: ${t}` };
+        // Имя программы (notepad, calc, chrome, firefox…) — через «start» на Windows
+        // и напрямую из PATH на Linux/macOS. Спецсимволы запрещены, иначе «открыть»
+        // превратилось бы в произвольную команду.
+        if (isWindows) {
+          if (/[&|<>^%"\r\n]/.test(t)) return { ok: false, text: `недопустимые символы в имени программы: ${t}` };
+          spawn('cmd.exe', ['/d', '/c', `start "" "${t}"`], {
+            detached: true, windowsHide: true, stdio: 'ignore', windowsVerbatimArguments: true,
+          }).unref();
+          return { ok: true, text: `запущено: ${t}` };
+        }
+        if (!/^[\w.+-]+$/.test(t)) return { ok: false, text: `недопустимые символы в имени программы: ${t}` };
+        return launchProgram(t);
       }
       case 'read': {
         const p = expandPath(action.target);
@@ -168,7 +218,7 @@ async function execute(action) {
         return { ok: true, text: `записан файл ${p}, ${action.content.length} символов${note}` };
       }
       case 'run':
-        return { ok: true, text: await runPowerShell(action.target) };
+        return { ok: true, text: await runShell(action.target) };
       default:
         return { ok: false, text: 'неизвестное действие' };
     }

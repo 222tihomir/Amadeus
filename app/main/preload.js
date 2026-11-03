@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('amadeus', {
+  // Платформа нужна интерфейсу для подсказок путей и названий горячих клавиш.
+  platform: process.platform,
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   chat: (req) => ipcRenderer.invoke('chat:send', req),

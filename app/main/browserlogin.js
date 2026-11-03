@@ -7,21 +7,46 @@ const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 const { app } = require('electron');
 const SITES = require('./sites');
+const { isWindows, isMac, isLinux, isExecutable, findOnPath } = require('./platform');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const LOCAL = process.env.LOCALAPPDATA || '';
 const PF = process.env.ProgramFiles || 'C:\\Program Files';
 const PF86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
 
-const BROWSERS = {
-  chrome: [`${PF}\\Google\\Chrome\\Application\\chrome.exe`, `${PF86}\\Google\\Chrome\\Application\\chrome.exe`, `${LOCAL}\\Google\\Chrome\\Application\\chrome.exe`],
-  edge: [`${PF86}\\Microsoft\\Edge\\Application\\msedge.exe`, `${PF}\\Microsoft\\Edge\\Application\\msedge.exe`],
-  brave: [`${PF}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`, `${LOCAL}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`],
-  yandex: [`${LOCAL}\\Yandex\\YandexBrowser\\Application\\browser.exe`],
+// Пути к браузерам на Chromium. Ключ — то, что хранится в настройках (`loginBrowser`).
+const BROWSER_PATHS = {
+  chrome: isWindows
+    ? [`${PF}\\Google\\Chrome\\Application\\chrome.exe`, `${PF86}\\Google\\Chrome\\Application\\chrome.exe`, `${LOCAL}\\Google\\Chrome\\Application\\chrome.exe`]
+    : isMac
+      ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
+      : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/opt/google/chrome/chrome'],
+  chromium: isWindows
+    ? [`${LOCAL}\\Chromium\\Application\\chrome.exe`]
+    : isMac
+      ? ['/Applications/Chromium.app/Contents/MacOS/Chromium']
+      : ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium'],
+  edge: isWindows
+    ? [`${PF86}\\Microsoft\\Edge\\Application\\msedge.exe`, `${PF}\\Microsoft\\Edge\\Application\\msedge.exe`]
+    : isMac
+      ? ['/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge']
+      : ['/usr/bin/microsoft-edge', '/usr/bin/microsoft-edge-stable', '/opt/microsoft/msedge/msedge'],
+  brave: isWindows
+    ? [`${PF}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`, `${LOCAL}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`]
+    : isMac
+      ? ['/Applications/Brave Browser.app/Contents/MacOS/Brave Browser']
+      : ['/usr/bin/brave-browser', '/usr/bin/brave', '/snap/bin/brave', '/opt/brave.com/brave/brave'],
+  yandex: isWindows
+    ? [`${LOCAL}\\Yandex\\YandexBrowser\\Application\\browser.exe`]
+    : isMac
+      ? ['/Applications/Yandex.app/Contents/MacOS/Yandex']
+      : ['/usr/bin/yandex-browser', '/usr/bin/yandex-browser-stable', '/opt/yandex/browser/yandex-browser'],
 };
-const PROG_IDS = { ChromeHTML: 'chrome', MSEdgeHTM: 'edge', BraveHTML: 'brave', YandexHTML: 'yandex' };
+const BROWSER_LABELS = { chrome: 'Chrome', chromium: 'Chromium', edge: 'Edge', brave: 'Brave', yandex: 'Яндекс.Браузер' };
+const BROWSER_BINS = { chrome: ['google-chrome', 'google-chrome-stable'], chromium: ['chromium', 'chromium-browser'], edge: ['microsoft-edge', 'microsoft-edge-stable'], brave: ['brave-browser', 'brave'], yandex: ['yandex-browser', 'yandex-browser-stable'] };
+const PROG_IDS = { ChromeHTML: 'chrome', ChromiumHTML: 'chromium', MSEdgeHTM: 'edge', BraveHTML: 'brave', YandexHTML: 'yandex' };
 
-function defaultBrowser() {
+function defaultBrowserWindows() {
   try {
     const out = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice', '/v', 'ProgId'], { encoding: 'utf8', windowsHide: true });
     const id = (out.match(/ProgId\s+REG_SZ\s+(\S+)/) || [])[1] || '';
@@ -31,14 +56,55 @@ function defaultBrowser() {
   }
 }
 
-// Браузер для входа: выбранный в настройках, иначе браузер по умолчанию (если он на Chromium), иначе Chrome/Edge/...
-function findBrowser(preferred) {
-  const order = [preferred !== 'auto' && preferred, defaultBrowser(), 'chrome', 'edge', 'brave', 'yandex'].filter(Boolean);
-  for (const name of order) {
-    const exe = (BROWSERS[name] || []).find((p) => fs.existsSync(p));
-    if (exe) return { name, exe };
+// Браузер по умолчанию в Linux: xdg-settings → xdg-mime. Firefox не подходит для CDP-входа.
+function defaultBrowserLinux() {
+  const ids = [];
+  for (const [cmd, args] of [
+    ['xdg-settings', ['get', 'default-web-browser']],
+    ['xdg-mime', ['query', 'default', 'x-scheme-handler/https']],
+  ]) {
+    try {
+      const out = execFileSync(cmd, args, { encoding: 'utf8', timeout: 2000 }).trim();
+      if (out) ids.push(out.toLowerCase());
+    } catch { /* программы нет — пробуем следующий способ */ }
   }
-  throw new Error('Не нашла Chrome, Edge, Brave или Яндекс.Браузер — вход через внешний браузер невозможен');
+  const known = [
+    [/^(google-chrome|google-chrome-stable)/, 'chrome'],
+    [/^chromium/, 'chromium'],
+    [/^(microsoft-edge|msedge)/, 'edge'],
+    [/^brave/, 'brave'],
+    [/^yandex/, 'yandex'],
+  ];
+  for (const id of ids) {
+    const hit = known.find(([re]) => re.test(id));
+    if (hit) return hit[1];
+  }
+  return null;
+}
+
+function defaultBrowser() {
+  if (isWindows) return defaultBrowserWindows();
+  if (isLinux) return defaultBrowserLinux();
+  return null; // macOS: берём первый найденный Chromium-браузер
+}
+
+// На Linux программы могут стоять в /usr/local/bin, ~/.local/bin, /snap/bin и т.п.,
+// поэтому кроме типовых путей проверяем PATH.
+function browserCandidates(name) {
+  const list = BROWSER_PATHS[name] || [];
+  const fromPath = (BROWSER_BINS[name] || []).map(findOnPath).filter(Boolean);
+  return [...new Set([...list, ...fromPath])];
+}
+
+// Браузер для входа: выбранный в настройках, иначе браузер по умолчанию (если он на Chromium),
+// иначе Chrome/Chromium/Edge/Brave/Яндекс.
+function findBrowser(preferred) {
+  const order = [preferred !== 'auto' && preferred, defaultBrowser(), 'chrome', 'chromium', 'edge', 'brave', 'yandex'].filter(Boolean);
+  for (const name of order) {
+    const exe = browserCandidates(name).find(isExecutable);
+    if (exe) return { name, label: BROWSER_LABELS[name] || name, exe };
+  }
+  throw new Error('Не нашла Chrome, Chromium, Edge, Brave или Яндекс.Браузер — вход через внешний браузер невозможен');
 }
 
 // ── Минимальный клиент DevTools-протокола ───────────────────────────────
@@ -111,7 +177,7 @@ async function readLogin(port, cfg) {
 }
 
 // Открытый для входа браузер (одновременно — только один).
-let active = null; // { site, port, proc, exited, browserName }
+let active = null; // { site, port, proc, exited, browserKey, browserLabel }
 
 // Шаг 1: открывает сайт во внешнем браузере. Куки НЕ переносятся — только сообщает,
 // выполнен ли вход (onStatus), пока ты не нажмёшь «Перенести вход» (transfer) или не закроешь браузер.
@@ -119,28 +185,32 @@ async function open(siteName, preferred = 'auto', onStatus = () => {}) {
   const cfg = SITES[siteName];
   if (!cfg) throw new Error(`Неизвестный сайт: ${siteName}`);
   if (active && !active.exited) {
-    if (active.site === siteName) return { browser: active.browserName };
+    if (active.site === siteName) return { browser: active.browserLabel };
     throw new Error(`Уже открыт браузер для входа в ${SITES[active.site].name} — перенеси вход или закрой его`);
   }
-  const { name: browserName, exe } = findBrowser(preferred);
+  const { name: browserKey, label: browserLabel, exe } = findBrowser(preferred);
   const port = 9300 + Math.floor(Math.random() * 500);
   // Отдельный профиль на каждый сайт: вход в нём сохраняется, повторный вход обычно в один клик.
   const profile = path.join(app.getPath('userData'), 'browser-login', siteName);
   fs.mkdirSync(profile, { recursive: true });
 
-  const proc = spawn(exe, [
+  const args = [
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${profile}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--new-window',
-    cfg.url,
-  ], { detached: true, stdio: 'ignore' });
+  ];
+  // На Linux под root Chromium не запускается с песочницей. Отдельный профиль и так изолирован.
+  if (isLinux && typeof process.getuid === 'function' && process.getuid() === 0) args.push('--no-sandbox');
+  args.push(cfg.url);
+
+  const proc = spawn(exe, args, { detached: true, stdio: 'ignore' });
   proc.unref();
-  const session = { site: siteName, port, proc, exited: false, browserName };
+  const session = { site: siteName, port, proc, exited: false, browserKey, browserLabel };
   proc.on('exit', () => { session.exited = true; });
   active = session;
-  onStatus(`Открыт ${browserName}: войди в аккаунт ${cfg.name}, затем нажми «Перенести вход»`);
+  onStatus(`Открыт ${browserLabel}: войди в аккаунт ${cfg.name}, затем нажми «Перенести вход»`);
 
   // Следим только за статусом: вход есть / нет / браузер закрыт.
   (async () => {
@@ -169,11 +239,11 @@ async function open(siteName, preferred = 'auto', onStatus = () => {}) {
         lastOk = state.ok;
         onStatus(state.ok
           ? `Вход в ${cfg.name} обнаружен — нажми «Перенести вход»`
-          : `Открыт ${browserName}: войди в аккаунт ${cfg.name}, затем нажми «Перенести вход»`);
+          : `Открыт ${browserLabel}: войди в аккаунт ${cfg.name}, затем нажми «Перенести вход»`);
       }
     }
   })();
-  return { browser: browserName };
+  return { browser: browserLabel };
 }
 
 function isOpen(siteName) {

@@ -1,7 +1,7 @@
 {
   "name": "amadeus",
   "productName": "Amadeus",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Amadeus — Курису Макисе на рабочем столе",
   "main": "main/main.js",
   "private": true,

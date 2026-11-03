@@ -5,6 +5,19 @@ const $ = (id) => document.getElementById(id);
 const SPRITES = '../assets/sprites/';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Платформа приходит из preload (в renderer нет process). От неё зависят подсказки путей.
+const PLATFORM = amadeus.platform || 'win32';
+const IS_WIN = PLATFORM === 'win32';
+const IS_MAC = PLATFORM === 'darwin';
+const USER_DATA = IS_WIN
+  ? '%APPDATA%\\Amadeus'
+  : IS_MAC
+    ? '~/Library/Application Support/Amadeus'
+    : '~/.config/Amadeus';
+const FILE_BACKUPS = IS_WIN ? `${USER_DATA}\\file-backups` : `${USER_DATA}/file-backups`;
+const VENV_PYTHON = IS_WIN ? '…\\venv\\Scripts\\python.exe' : '…/venv/bin/python';
+const OPENCODE_BIN = IS_WIN ? 'opencode-cli.exe' : 'opencode';
+
 let settings = {};
 let fullscreenOn = false; // окно сейчас в fullscreen (кнопка «на весь экран»)
 const state = {
@@ -757,7 +770,7 @@ $('btn-log').addEventListener('click', openLog);
 
 // ── Настройки ─────────────────────────────────────────────────────────
 const WEB_SITES = [['claude', 'Claude'], ['chatgpt', 'ChatGPT'], ['deepseek', 'DeepSeek'], ['gemini', 'Gemini'], ['grok', 'Grok'], ['qwen', 'Qwen']];
-const BROWSER_NAMES = { chrome: 'Chrome', edge: 'Edge', brave: 'Brave', yandex: 'Яндекс.Браузер' };
+const BROWSER_NAMES = { chrome: 'Chrome', chromium: 'Chromium', edge: 'Edge', brave: 'Brave', yandex: 'Яндекс.Браузер' };
 
 // h — раздел (сворачивается), only — поле видно, только когда выбран этот провайдер
 // (основной, для скриншотов или для распознавания речи).
@@ -766,7 +779,7 @@ const SCHEMA = [
   { k: 'provider', l: 'Кто отвечает', opts: [['web', 'Без ключа — сайт нейросети'], ['anthropic', 'Claude API'], ['openai', 'ChatGPT API'], ['deepseek', 'DeepSeek API'], ['opencode', 'OpenCode (локально, без ключа)']] },
   { k: 'webSite', only: 'web', l: 'Сайт', opts: WEB_SITES, hint: 'Модель выбирается на самом сайте: «Показать браузер» → меню моделей (например Haiku у Claude). Сайт запоминает выбор' },
   { webButtons: true, only: 'web' },
-  { k: 'loginBrowser', only: 'web', l: 'Браузер для входа', opts: [['auto', 'Браузер по умолчанию'], ['chrome', 'Chrome'], ['edge', 'Edge'], ['brave', 'Brave'], ['yandex', 'Яндекс.Браузер']] },
+  { k: 'loginBrowser', only: 'web', l: 'Браузер для входа', opts: [['auto', 'Браузер по умолчанию'], ['chrome', 'Chrome'], ['chromium', 'Chromium'], ['edge', 'Edge'], ['brave', 'Brave'], ['yandex', 'Яндекс.Браузер']] },
   { k: 'anthropicKey', only: 'anthropic', l: 'API-ключ Anthropic', type: 'password' },
   { k: 'anthropicModel', only: 'anthropic', l: 'Модель', hint: 'claude-haiku-5-5 — быстрая и дешёвая' },
   { k: 'openaiKey', only: 'openai', l: 'API-ключ OpenAI', type: 'password' },
@@ -776,7 +789,7 @@ const SCHEMA = [
   { k: 'deepseekModel', only: 'deepseek', l: 'Модель' },
   { k: 'opencodeModel', only: 'opencode', l: 'Модель OpenCode', list: 'oc-models', hint: 'Ключ не нужен — ответы идут через установленное приложение OpenCode. Кнопка ниже подтягивает список: например opencode/glm-5.3-flash-free, у моделей с «vl» в названии есть зрение' },
   { opencodeButtons: true, only: 'opencode' },
-  { k: 'opencodeCli', only: 'opencode', l: 'Путь к opencode-cli.exe', hint: 'Пусто — Amadeus найдёт сам' },
+  { k: 'opencodeCli', only: 'opencode', l: `Путь к ${OPENCODE_BIN}`, hint: 'Пусто — Amadeus найдёт сам' },
   { k: 'temperature', l: 'Живость ответов (температура)', type: 'range', step: 0.05, min: 0, max: 1.5 },
 
   { h: 'Характер и память' },
@@ -789,7 +802,7 @@ const SCHEMA = [
   { h: 'Доступ к компьютеру' },
   { k: 'toolsEnabled', l: 'Разрешить Курису открывать сайты, файлы и программы, читать и менять файлы, выполнять команды', type: 'checkbox' },
   { k: 'toolsAutoSafe', l: 'Открыть / прочитать / посмотреть папку по моей просьбе — без подтверждения', type: 'checkbox' },
-  { k: 'toolsAutoChanges', l: 'Изменить файл / выполнить команду по моей просьбе — без подтверждения', type: 'checkbox', hint: 'Выключено — на каждое изменение и команду появляется карточка «Разрешить / Отклонить». Если Курису сама что-то предлагает, она всегда сначала спрашивает. Старые версии изменённых файлов сохраняются в %APPDATA%\\Amadeus\\file-backups' },
+  { k: 'toolsAutoChanges', l: 'Изменить файл / выполнить команду по моей просьбе — без подтверждения', type: 'checkbox', hint: `Выключено — на каждое изменение и команду появляется карточка «Разрешить / Отклонить». Если Курису сама что-то предлагает, она всегда сначала спрашивает. Старые версии изменённых файлов сохраняются в ${FILE_BACKUPS}` },
 
   { h: 'Взгляд на экран' },
   { k: 'screenshotMinutes', l: 'Смотреть на экран каждые N минут тишины (0 — выкл.)', type: 'number', step: 0.5, min: 0 },
@@ -800,13 +813,13 @@ const SCHEMA = [
   { k: 'ttsEnabled', l: 'Озвучивать ответы', type: 'checkbox' },
   { k: 'ttsBackend', l: 'Движок озвучки', opts: [['local', 'Локальный (OmniVoice, без VoiceStudio)'], ['voicestudio', 'VoiceStudio (HTTP-сервер)'], ['silero', 'Silero (лёгкий синтез)']] },
   { h: 'Локальный движок (OmniVoice)' },
-  { k: 'ttsPython', l: 'Python (env с OmniVoice)', only: 'local', hint: 'python.exe из venv, где установлен OmniVoice: …\\venv\\Scripts\\python.exe' },
+  { k: 'ttsPython', l: 'Python (env с OmniVoice)', only: 'local', hint: `Python из venv, где установлен OmniVoice: ${VENV_PYTHON}` },
   { k: 'ttsModelDir', l: 'Папка модели OmniVoice', only: 'local', hint: 'Папка с model.safetensors и tokenizer.json' },
   { k: 'ttsRefAudio', l: 'Референс Курису (файл)', only: 'local', hint: 'Аудио с голосом для клонирования (wav/ogg/mp3)' },
   { k: 'ttsRefTextFile', l: 'Референс: текст оригинала (файл)', only: 'local', hint: 'Текст, который произнесён в референсной записи' },
   { k: 'ttsSteps', l: 'Шагов генерации', type: 'number', min: 4, max: 64, step: 1, unit: '', only: 'local', hint: 'Меньше — быстрее и чуть «проще», до 16 уже хорошо. 32 — чуть длиннее тихий этап' },
   { h: 'Silero (лёгкий базовый синтез)' },
-  { k: 'sileroPython', l: 'Python (env с Silero)', only: 'silero', hint: 'python.exe из venv с Silero: …\\venv\\Scripts\\python.exe' },
+  { k: 'sileroPython', l: 'Python (env с Silero)', only: 'silero', hint: `Python из venv с Silero: ${VENV_PYTHON}` },
   { k: 'sileroModel', l: 'Модель Silero (файл)', only: 'silero', hint: 'Файл модели v5 ru: silero_tts_ru_v5.pt' },
   { k: 'sileroSpeaker', l: 'Голос Silero (v5_…_ru)', only: 'silero', hint: 'aidar, baya, kseniya, xenia, eugene — голос Silero, который будет базовым' },
   { k: 'sileroLanguage', l: 'Язык Silero', only: 'silero', hint: 'ru — русский' },
@@ -870,7 +883,8 @@ function buildWebBox() {
       status.textContent = cleanError(err);
     }
   };
-  const browserName = BROWSER_NAMES[defaultBrowser] || 'браузер';
+  // main возвращает готовое название (Chrome, Chromium, Edge…); ключ оставлен для старых версий.
+  const browserName = BROWSER_NAMES[defaultBrowser] || defaultBrowser || 'браузер';
   // Одна кнопка в два шага: «Войти через Chrome» открывает браузер, «Перенести вход» забирает куки.
   // Куки переносятся только по второму нажатию.
   let loginBtn;

@@ -1,0 +1,2 @@
+# Shell-скрипты должны оставаться с LF, иначе bash на Linux не запустит Amadeus.sh.
+*.sh text eol=lf

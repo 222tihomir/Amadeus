@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS = {
   deepseekModel: 'deepseek-chat',
   // OpenCode (локальное приложение): ключ не нужен, модели — из `opencode models`.
   opencodeModel: 'opencode/glm-5.3-flash-free',
-  opencodeCli: '', // пусто — найти opencode-cli.exe автоматически
+  opencodeCli: '', // пусто — найти opencode-cli.exe (Windows) или opencode (Linux/macOS) автоматически
   temperature: 0.9,
   // Каждые N ответов разговор пересказывается, и дальше нейросеть получает пересказ + последние
   // реплики, а не всю переписку (на сайте при этом начинается новый чат).
@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS = {
   ttsEnabled: true,
   ttsBackend: 'local', // local (OmniVoice напрямую) | voicestudio (HTTP-API приложения) | silero (Silero)
   // Пути к моделям и окружению задаются в настройках: в репозитории их нет.
-  ttsPython: '', // python.exe из venv, где установлен OmniVoice
+  ttsPython: '', // python из venv, где установлен OmniVoice (Windows: python.exe, Linux/macOS: bin/python)
   ttsModelDir: '', // папка с моделью OmniVoice
   ttsRefAudio: '', // аудио с голосом для клонирования
   ttsRefTextFile: '', // текст, который произнесён в референсе
@@ -54,7 +54,7 @@ const DEFAULT_SETTINGS = {
   volume: 0.9,
 
   // Silero v5 (русский TTS) — лёгкий локальный синтез.
-  sileroPython: '', // python.exe из venv с Silero
+  sileroPython: '', // python из venv с Silero (Windows: python.exe, Linux/macOS: bin/python)
   sileroModel: '', // файл silero_tts_ru_v5.pt
   sileroSpeaker: 'baya',
   sileroLanguage: 'ru',

@@ -16,12 +16,22 @@ const TTS_TEMP = path.join(os.tmpdir(), 'amadeus-tts');
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 
+// Linux/macOS: в настройках можно писать ~/venv/bin/python или $HOME/....
+// На Windows пути с %USERPROFILE% раскрывает сама система при запуске.
+function expandHome(p) {
+  const v = String(p || '').trim();
+  if (!v || process.platform === 'win32') return v;
+  return v
+    .replace(/^\$HOME(?=\/|$)/, os.homedir())
+    .replace(/^~(?=\/|$)/, os.homedir());
+}
+
 function ttsConfig(s) {
   if (!s || s.ttsBackend !== 'local') return null;
-  const python = (s.ttsPython || '').trim();
-  const model = (s.ttsModelDir || '').trim();
-  const ref = (s.ttsRefAudio || '').trim();
-  const refText = (s.ttsRefTextFile || '').trim();
+  const python = expandHome(s.ttsPython);
+  const model = expandHome(s.ttsModelDir);
+  const ref = expandHome(s.ttsRefAudio);
+  const refText = expandHome(s.ttsRefTextFile);
   if (!python || !isFile(python)) return null;
   if (!model || !isDir(model)) return null;
   if (!ref || !isFile(ref) || !refText || !isFile(refText)) return null;
@@ -195,8 +205,8 @@ function stopSilero() {
 // Silero нужен только при ttsBackend === 'silero'; остальные значения не трогаем.
 function sileroConfig(s) {
   if (!s || (s.ttsBackend || 'local') !== 'silero') return null;
-  const python = (s.sileroPython || '').trim();
-  const model = (s.sileroModel || '').trim();
+  const python = expandHome(s.sileroPython);
+  const model = expandHome(s.sileroModel);
   if (!python || !isFile(python)) return null;
   if (!model || !isFile(model)) return null;
   const speaker = (s.sileroSpeaker || 'baya').trim();

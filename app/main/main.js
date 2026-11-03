@@ -10,6 +10,11 @@ const browserlogin = require('./browserlogin');
 const tools = require('./tools');
 const { buildSystemPrompt, DEFAULT_PERSONA } = require('./persona');
 const { BY_ID } = require('../shared/emotions');
+const { isLinux } = require('./platform');
+
+// На Linux прозрачное окно без этой опции часто рисуется с чёрным фоном
+// (зависит от композитора). На Windows/macOS опция не нужна.
+if (isLinux) app.commandLine.appendSwitch('enable-transparent-visuals');
 
 let win = null;
 // Пропорции корпуса телефона (assets/ui/phone.webp 400×784).
@@ -345,7 +350,7 @@ function setupIpc() {
   ipcMain.handle('web:transferLogin', async (_, site) => webchat.importLogin(site, await browserlogin.transfer(site)));
   ipcMain.handle('web:loginOpen', (_, site) => browserlogin.isOpen(site));
   ipcMain.handle('web:browsers', () => {
-    try { return browserlogin.findBrowser('auto').name; } catch { return null; }
+    try { return browserlogin.findBrowser('auto').label; } catch { return null; }
   });
   ipcMain.handle('web:toggle', (_, site) => {
     if (webchat.isVisible(site)) webchat.hide(site);
@@ -372,7 +377,10 @@ function setupIpc() {
       const display = screen.getDisplayMatching(normalBounds);
       const b = display.bounds; // весь экран целиком, включая панель задач
       fullscreenOn = true;
-      win.setAlwaysOnTop(true, 'screen-saver');
+      // 'screen-saver' — уровень выше панели задач на Windows/macOS; на Linux композиторы
+      // поддерживают только обычный always-on-top, иначе окно может не развернуться.
+      if (isLinux) win.setAlwaysOnTop(true);
+      else win.setAlwaysOnTop(true, 'screen-saver');
       win.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height });
     } else {
       fullscreenOn = false;
