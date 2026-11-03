@@ -255,7 +255,7 @@ C:\Games\omnivoice\refs\kurisu2.txt   текст записи дословно, 
 
 ```bat
 cd C:\Games\omnivoice
-venv\Scripts\python.exe C:\Amadei\app\main\tts_worker.py models\OmniVoice refs\kurisu2.ogg refs\kurisu2.txt ru
+venv\Scripts\python.exe C:\Amadeus\app\main\tts_worker.py models\OmniVoice refs\kurisu2.ogg refs\kurisu2.txt ru
 ```
 
 После строк `[tts] модель загружена…` и `[tts] прогрев генерации…` воркер молчит,
